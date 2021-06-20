@@ -1,0 +1,3 @@
+[submodule "fsb-systemd"]
+	path = fsb-systemd
+	url = git@github.com:glevand/fsb--systemd.git
