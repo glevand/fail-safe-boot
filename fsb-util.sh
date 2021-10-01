@@ -214,7 +214,8 @@ script_name="${0##*/}"
 base_name="${script_name##*/%}"
 base_name="${base_name%.sh*}"
 
-SCRIPTS_TOP=${SCRIPTS_TOP:-"$(cd "${BASH_SOURCE%/*}" && pwd)"}
+real_source="$(realpath "${BASH_SOURCE}")"
+SCRIPT_TOP="$(realpath "${SCRIPT_TOP:-${real_source%/*}}")"
 
 start_time="$(date +%Y.%m.%u-%H.%M.%S)"
 SECONDS=0
