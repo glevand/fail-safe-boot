@@ -3,6 +3,7 @@ AUTOMAKE_OPTIONS = foreign
 ACLOCAL_AMFLAGS = -I m4
 
 composed_bin_scripts = \
+	fsb-lib.sh \
 	fsb-ack.sh \
 	fsb-util.sh
 
