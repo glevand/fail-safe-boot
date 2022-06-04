@@ -1,0 +1,140 @@
+#!/usr/bin/env bash
+#
+# @PACKAGE_NAME@ ${script_name}"
+# Version: @PACKAGE_VERSION@"
+# Project Home: @PACKAGE_URL@"
+#
+
+efi_mnt="/sys/firmware/efi/efivars"
+
+efi_vendor_id="8be4df61-93ca-11d2-aa0d-00e098032b8c"
+fsb_vendor_id="9c4b2ad9-cff6-485b-ac30-5398aec7605c"
+
+# EFI_VARIABLE_NON_VOLATILE       1U
+# EFI_VARIABLE_BOOTSERVICE_ACCESS 2U
+# EFI_VARIABLE_RUNTIME_ACCESS     4U
+
+efi_attr_ba_ra='06'
+efi_attr_nv_ba_ra='07'
+
+print_project_banner() {
+	echo "${script_name} (@PACKAGE_NAME@) - ${start_time}"
+}
+
+print_project_info() {
+	echo "  @PACKAGE_NAME@ ${script_name}"
+	echo "  Version: @PACKAGE_VERSION@"
+	echo "  Project Home: @PACKAGE_URL@"
+}
+
+on_exit() {
+	local result=${1}
+	local sec="${SECONDS}"
+
+	set +x
+	echo "${script_name}: Done: ${result}, ${sec} sec." >&2
+}
+
+on_err() {
+	local f_name=${1}
+	local line_no=${2}
+	local err_no=${3}
+
+	echo "${script_name}: ERROR: (${err_no}) at ${f_name}:${line_no}." >&2
+	exit ${err_no}
+}
+
+check_prog() {
+	local prog="${1}"
+	local result;
+
+	result=0
+	if ! test -x "$(command -v "${prog}")"; then
+		echo "${script_name}: ERROR: Please install '${prog}'." >&2
+		result=1
+	fi
+
+	return ${result}
+}
+
+dump_vars() {
+	local msg=${1}
+
+	{
+		echo "${msg}"
+		hexdump -e '"BootCurrent: " 8/1 "%02x " "\n"' < "${efi_mnt}/BootCurrent-${efi_vendor_id}" || :
+		hexdump -e '"BootNext:    " 8/1 "%02x " "\n"' < "${efi_mnt}/BootNext-${efi_vendor_id}" || :
+		hexdump -e '"fsb-counter: " 8/1 "%02x " "\n"' < "${efi_mnt}/fsb-counter-${fsb_vendor_id}" || :
+		hexdump -e '"fsb-map:     " 8/1 "%02x " "\n"' < "${efi_mnt}/fsb-map-${fsb_vendor_id}" || :
+		hexdump -e '"fsb-index:   " 8/1 "%02x " "\n"' < "${efi_mnt}/fsb-index-${fsb_vendor_id}" || :
+		echo
+	} >&1
+}
+
+to_hex_16() {
+	local name=${1}
+	local in=${2}
+	local out=${2}
+
+	if [[ "${in:0:2}" == '0x' ]]; then
+		out="${in#0x}"
+	elif [[ "${in:(-1)}" == 'h' ]]; then
+		out="${in%h}"
+	else
+		out="$(printf "%04x" "${in}")"
+	fi
+
+	if [[ ${verbose} ]]; then
+		echo "${FUNCNAME[0]}: '${in}' -> '${out}'" >&2
+	fi
+
+	if (( ${#out} != 4 )); then
+		echo "${FUNCNAME[0]}: ERROR: Bad value: ${name} '${in}'" >&2
+		exit 1
+	fi
+
+	echo "${out}"
+}
+
+set_var_16() {
+	local vendor_id=${1}
+	local name=${2}
+	local value=${3}
+
+	local file="${efi_mnt}/${name}-${vendor_id}"
+
+	echo "Set ${name}: ${value}"
+
+	local hex_value
+	hex_value="$(to_hex_16 "${name}" "${value}")"
+
+	if [[ ! ${dry_run} ]]; then
+		chattr -i "${file}" 2>&1 > /dev/null || :
+		printf "\x07\x00\x00\x00\x${hex_value:2:2}\x${hex_value:0:2}" > "${file}"
+		if [[ ${verbose} ]]; then
+			hexdump -e "\"read ${name}:   \" 8/1 \"%02x \" \"\n\"" < "${file}"
+		fi
+	fi
+}
+
+test_1() {
+	verbose=1
+
+	for (( i = 0; i <= 65535; i += 1 )); do
+		to_hex_16 "${i}" "${i}"
+	done
+}
+
+test_2() {
+	verbose=1
+#	dry_run=1
+
+#	for (( i = 0; i <= 65535; i += 30 )); do
+	for (( i = 2559; i <= 2561; i += 1 )); do
+		set_var_16 "${fsb_vendor_id}" "fsb-test" "${i}"
+		echo
+	done
+
+	chattr -i "${efi_mnt}/fsb-test-${fsb_vendor_id}"
+	rm -f "${efi_mnt}/fsb-test-${fsb_vendor_id}"
+}
